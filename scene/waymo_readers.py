@@ -27,7 +27,6 @@ class CameraInfo(NamedTuple):
     FovY: np.array
     FovX: np.array
     image: np.array
-    seg: np.array
     depth:np.array
     image_path: str
     image_name: str
@@ -48,7 +47,7 @@ class SceneInfo(NamedTuple):
     ply_path: str
 
 
-def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, segs_folder, depths_folder, camera_num=1):
+def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, depths_folder, camera_num=1):
     cam_infos = []
     frame_len = int(len(cam_extrinsics)/camera_num)
     frame_start = 90
@@ -98,14 +97,25 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, segs_folder
         cx = float(intr.params[2])
         cy = float(intr.params[3])
         image_path = os.path.join(images_folder, extr.name)
-        seg_path = os.path.join(segs_folder, extr.name.replace(".jpg", ".png"))
         depth_path = os.path.join(depths_folder, extr.name.replace(".jpg", ".npy"))
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path)
-        seg = Image.open(seg_path)
-        depth = np.load(depth_path)
+        #depth = np.load(depth_path)
         depth = Image.fromarray(depth)
-        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image, seg=seg, depth=depth,
+        
+        
+        #depth_path = os.path.join(path, 'lidar_depth', f'{image_name}.npy')
+        
+        depth = np.load(depth_path, allow_pickle=True)
+        if isinstance(depth, np.ndarray):
+            depth = dict(depth.item())
+            mask = depth['mask']
+            value = depth['value']
+            depth = np.zeros_like(mask).astype(np.float32)
+            depth[mask] = value
+        
+        
+        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image, depth=depth,
                               image_path=image_path, image_name=image_name, width=width, height=height, K=K,
                               cx=cx, cy=cy, fx=fx, fy=fy)
         cam_infos.append(cam_info)
@@ -126,7 +136,7 @@ def readWaymoSceneInfo(path, images, eval, filter_camera_id=[1],llffhold=8):
 
     reading_dir = "images" if images == None else images
     cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir), 
-                                           segs_folder=os.path.join(path, "segs"), depths_folder=os.path.join(path, "depths"), camera_num=len(filter_camera_id))
+                                           depths_folder=os.path.join(path, "depths"), camera_num=len(filter_camera_id))
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
     if eval:
