@@ -12,6 +12,7 @@
 from scene.cameras import Camera
 import numpy as np
 from utils.general_utils import PILtoTorch
+from utils.general_utils import numpyToTorch
 from utils.graphics_utils import fov2focal
 
 WARNED = False
@@ -40,7 +41,13 @@ def loadCam(args, id, cam_info, resolution_scale):
 
     resized_image_rgb = PILtoTorch(cam_info.image, resolution)
     gt_image = resized_image_rgb[:3, ...]
-    gt_depth = PILtoTorch(cam_info.depth, resolution).squeeze(0)
+    #print(f"gt_image {gt_image.shape}")
+    #print(f"cam_info.depth {cam_info.depth.shape}")
+    gt_depth = numpyToTorch(cam_info.depth, resolution)#.squeeze(-1)
+    #print(f"gt_depth {gt_depth.shape}")
+    gt_depth = gt_depth.squeeze(0)
+    print(f"gt_depth {gt_depth.shape}")
+    print(f"max {gt_depth.max()}")
     loaded_mask = None
 
     if resized_image_rgb.shape[1] == 4:

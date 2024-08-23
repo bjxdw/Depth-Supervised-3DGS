@@ -14,6 +14,7 @@ import sys
 from datetime import datetime
 import numpy as np
 import random
+from skimage.transform import resize  # 需要安装 scikit-image
 
 def inverse_sigmoid(x):
     return torch.log(x/(1-x))
@@ -25,6 +26,36 @@ def PILtoTorch(pil_image, resolution):
         return resized_image.permute(2, 0, 1)
     else:
         return resized_image.unsqueeze(dim=-1).permute(2, 0, 1)
+    
+def numpyToTorch(array, resolution=None):
+    tensor = torch.from_numpy(array)
+    return tensor
+    '''
+    #array = np.repeat(array, 3, axis=0)
+    array.squeeze(0)
+    print(f"{array.shape}")
+    print(f"{resolution}")
+    # 确保数组是浮点数类型
+    if array.dtype != np.float32:
+        array = array.astype(np.float32)
+    
+    # 如果提供了新的分辨率，调整数组的大小
+    if resolution is not None:
+        # 这里假设数组至少是二维的，使用resize函数来调整大小
+        array = resize(array, resolution, anti_aliasing=True, mode='reflect')
+    
+    # 将Numpy数组转换为PyTorch张量
+    tensor = torch.from_numpy(array)
+    
+    # 如果张量是三维的（例如具有颜色通道的图像），确保通道在前
+    if tensor.dim() == 3:
+        # 调整通道顺序，使其适合PyTorch (CHW) 而不是 (HWC)
+        tensor = tensor.permute(2, 0, 1)
+    else:
+        # 如果它是二维的（单通道图像），添加一个通道维度
+        tensor = tensor.unsqueeze(0)  # 从 HxW -> 1xHxW
+    return tensor
+    '''
 
 def get_expon_lr_func(
     lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000

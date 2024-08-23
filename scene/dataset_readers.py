@@ -99,8 +99,13 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, depth_folde
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path)
 
-        depth_path = os.path.join(depth_folder, image_name + '.png')
-        depth = Image.open(depth_path)
+        #depth_path = os.path.join(depth_folder, image_name + '.png')
+        #depth = Image.open(depth_path)
+        depth_path = os.path.join(depth_folder, image_name + '.npy')
+        depth = np.load(depth_path)
+        
+        print(f"gt_depth {depth.shape}")
+        print(f"max {depth.max()}")
         
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image, depth=depth,
                               image_path=image_path, image_name=image_name, width=width, height=height)
@@ -147,7 +152,7 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
 
     reading_dir = "images" if images == None else images
     cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, 
-                                        images_folder=os.path.join(path, reading_dir), depth_folder=os.path.join(path,"mono_depth"))
+                                        images_folder=os.path.join(path, reading_dir), depth_folder=os.path.join(path,"sfm_depth"))
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
     if eval:

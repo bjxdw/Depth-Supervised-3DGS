@@ -28,16 +28,18 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
+
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
-    scene = Scene(dataset, gaussians)
+    print(f"Shape of gaussians.get_xyz#1: {gaussians.get_xyz.shape}")
+    scene = Scene(dataset, gaussians, sparse=False)
     gaussians.training_setup(opt)
+    
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
-
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
@@ -46,6 +48,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     viewpoint_stack = None
     ema_loss_for_log = 0.0
+    ema_depthloss_for_log, prev_depthloss, deploss = 0.0, 1e2, torch.zeros(1)#
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
     for iteration in range(first_iter, opt.iterations + 1):        
@@ -88,13 +91,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         depth = render_pkg["depth"] #/ render_pkg["alpha"]
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
-        gt_depth = gt_depth = viewpoint_cam.original_depth.cuda()
+        gt_sfm_depth = gt_depth = viewpoint_cam.original_depth.cuda()
         
+        depth = depth.repeat(3, 1, 1)
+        #print(f"{image.shape} {gt_image.shape} {depth.shape} {gt_depth.shape}")
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         
-        loss_depth = l1_loss(depth, gt_depth)
-        loss += 0.2 * loss_depth
+        sfm_mask = (gt_sfm_depth > 0).float()
+        deploss = l1_loss(depth * sfm_mask, gt_sfm_depth)
+        loss += 0.1 * deploss
         
         loss.backward()
 
@@ -103,8 +109,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         with torch.no_grad():
             # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
+            ema_depthloss_for_log = 0.2 * deploss.item() + 0.8 * ema_depthloss_for_log#
             if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
+                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}", "Deploss": f"{ema_depthloss_for_log:.4f}", "#pts": gaussians._xyz.shape[0]})#
                 progress_bar.update(10)
             if iteration == opt.iterations:
                 progress_bar.close()
@@ -222,6 +229,7 @@ if __name__ == "__main__":
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
+    print("Init done!!!")
     training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
 
     # All done
